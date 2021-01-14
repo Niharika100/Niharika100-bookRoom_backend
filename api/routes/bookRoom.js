@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 const BookRoom = require('../models/bookRoom');
+const addRoomData = require('../models/addRoom');
 
 router.get('/', (req, res, next) => {
     BookRoom.find()
@@ -43,123 +44,113 @@ router.post('/', (req, res, next) => {
         });
 });
 
-router.patch('/', (req, res, next) => {
-    var flag = 0;
-    const id = req.body.roomId;
-    const date = req.body.dateToBook;
-    const slotsRequired = req.body.slotsRequired;
-    BookRoom.findOne({ roomId: mongoose.Types.ObjectId(id)})
-        .exec()
-        .then(data => {
-            for (var i = 0; i < slotsRequired.length; i++) {
-                for (var j = 0; j < data.reservations.length; j++) {
-                    console.log(data.reservations[j].slotNumber + " " + slotsRequired[i]);
-                    if (data.reservations[j].slotNumber.includes(slotsRequired[i])) {
-                        console.log("found the match " + data.reservations[j].slotNumber + " " + slotsRequired[i]);
+router.patch('/', async function (req, res, next) {
+    addRoomData.findById(req.body.roomId)
+        .then(async rooms => {
+            const id = req.body.roomId;
+            const date = req.body.dateToBook;
+            const slotsRequired = req.body.slotsRequired;
+            var slots = [];
+            var DBDate = null;
+            debugger;
+            const DataId = addRoomData._id;
+            console.log(DataId);
+
+            const retData = await findDetails();
+            function findDetails() {
+                try {
+                    return BookRoom.find({ roomId: mongoose.Types.ObjectId(id), dateToBook: date });
+                }
+                catch (error) {
+                    console.log(error);
+                }
+            }
+
+            if (retData.length == 0) {
+                console.log('no data found');
+                console.log(slotsRequired.length)
+                if (slotsRequired.length > 1) {
+                    const BookingData = new BookRoom(
+                        {
+                            roomId: id,
+                            dateToBook: date,
+                            reservations: [
+                                {
+                                    slotNumber: slotsRequired[0],
+                                    userName: req.body.userName
+                                }
+                            ]
+                        }
+                    );
+
+                    BookingData.save()
+                        .then(data => {
+                            console.log(data);
+                            updateData(1);
+                        })
+                        .catch(err => {
+                            console.log(err);
+                            res.status(500).json({ error: err });
+                        });
+                    console.log('data Saved');
+                }
+                else {
+                    updateData(0);
+                }
+
+            }
+            else {
+                DBDate = retData[0].dateToBook;
+                for (var i = 0; i < retData[0].reservations.length; i++) {
+                    slots[i] = retData[0].reservations[i].slotNumber;
+                }
+                console.log(slots);
+                updateData(0);
+            }
+
+            function updateData(val) {
+                for (var j = val; j < slotsRequired.length; j++) {
+                    if (slots.includes(slotsRequired[j])) {
+                        console.log(slotsRequired[j] + ' Slot already booked');
                         flag = 1;
-                        next();
-                        // break;
-                        // return res.json({
-                        //     message: 'slots alerady booked'
-                        // });
+                    }
+                    else {
+                        BookRoom.updateOne(
+                            {
+                                roomId: mongoose.Types.ObjectId(id),
+                                dateToBook: date
+                            },
+                            {
+                                $addToSet: {
+                                    "reservations": {
+                                        "slotNumber": req.body.slotsRequired[j],
+                                        "userName": req.body.userName
+                                    }
+                                }
+                            })
+                            .exec()
+                            .then(data => {
+                                console.log(data);
+                            })
+                            .catch(err => {
+                                console.log(err);
+                                res.status(500).json({ error: err });
+                            });
                     }
                 }
             }
-            if(flag == 0){
-                flag = 2;
-                // return res.json({
-                //     message: 'slots will be booked'
-                // });
-            }
-        })
+            res.status(200).json({
+                message: 'Executed'
+            });
+        }
+        )
         .catch(err => {
-            console.log(err);
+            res.status(500).json({
+                message: 'room not found',
+                error: err
+            });
         });
-
-    if (flag == 2) {
-        console.log("No match found")
-        BookRoom.findOneAndUpdate(
-            { roomId: mongoose.Types.ObjectId(id), dateToBook: date },
-            // {"$where" : "req.body.slotsRequired[i] != doc.reservations[]slotNumber"},
-            {
-                // function (err,doc){
-                //     if(req.body.slotsRequired[i] in doc.reservations && req.body.dateToBook == doc.dateToBook){
-                //             console.log('Slots already booked')
-                //             res.end()
-                //     }
-                // },
-                $push: {
-                    "reservations": {
-                        "slotNumber": req.body.slotsRequired,
-                        "userName": req.body.userName
-                    }
-                }
-            },
-            // function(err,result){
-            //     if(err){
-            //         res.status(500).json({ error: err });
-            //     }
-            //     else{
-            //         res.status(200).json({
-            //             message: 'booked'
-            //         })
-            //     }
-            // }
-        ).exec()
-        .then(data => {
-            // if(slotsRequired[i] in slotNumber){
-
-            // }
-            console.log(data);
-        })
-        .catch(err => {
-            console.log(err);
-            res.status(500).json({ error: err });
-            res.end();
-        });
-        res.status(200).json({ 
-            message : 'booked'
-         });
-    }
-    // if(flag == 2){
-    // }
-    // else if(flag == 1){
-    //     res.status(404).json({
-    //         message : 'slots already booked'
-    //     });
-    // }
 });
-
-// book slots of a 
-// router.patch('/', (req, res, next) => {
-//     const id = req.body.roomId;
-//     const date = req.body.dateToBook;
-//     const slotsRequired = req.body.slotsRequired;
-
-//     for (var j = 0; j < req.body.slotsRequired.length; j++) {
-//         BookRoom.findOneAndUpdate(
-//             { roomId: mongoose.Types.ObjectId(id) },
-//             {
-//                 $push: {
-//                     "reservations": {
-//                         "slotNumber": req.body.slotsRequired[j],
-//                         "userName": req.body.userName
-//                     }
-//                 }
-//             }
-//         ).exec()
-//             .then(data => {
-//                 console.log(data);
-//             })
-//             .catch(err => {
-//                 console.log(err);
-//                 res.status(500).json({ error: err });
-//             });
-//     }
-//     res.status(200).json({
-//         message: 'booked'
-//     })
-// });
 
 module.exports = router;
 
